@@ -3,11 +3,11 @@ import openai
 import requests
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
-from urllib.parse import urlparse
 
 # --- CONFIGURATION ---
-# specific_site_url = "https://hireoverseas.com" # Replace with actual URL if different
-# sitemap_url = "https://hireoverseas.com/sitemap.xml" 
+# Replace this with your ACTUAL sitemap URL for the Hire Overseas website
+# Example: "https://hireoverseas.com/sitemap.xml" or "https://hireoverseas.com/post-sitemap.xml"
+SITEMAP_URL = "https://hireoverseas.com/sitemap.xml" 
 
 # Set page layout
 st.set_page_config(page_title="Hire Overseas SEO Generator", layout="wide")
@@ -17,7 +17,7 @@ st.set_page_config(page_title="Hire Overseas SEO Generator", layout="wide")
 def get_sitemap_links(sitemap_url):
     """Fetches real URLs from the website to prevent hallucination."""
     try:
-        response = requests.get(sitemap_url)
+        response = requests.get(sitemap_url, timeout=10)
         if response.status_code == 200:
             # Parse XML
             root = ET.fromstring(response.content)
@@ -144,8 +144,8 @@ def generate_seo_content(api_key, primary_kw, secondary_kws, competitor_urls):
     # --- STEP 5: INTERNAL LINKING ---
     status.info("Phase 5: Finding internal linking opportunities...")
     
-    # Note: Replace with your actual sitemap URL
-    sitemap_links = get_sitemap_links("https://hireoverseas.com/sitemap.xml") 
+    # Fetch real sitemap links
+    sitemap_links = get_sitemap_links(SITEMAP_URL) 
     
     # If sitemap fetch fails or is empty, we handle it gracefully
     links_context = "\n".join(sitemap_links) if sitemap_links else "No sitemap data found. Suggest general relevant anchors."
@@ -178,7 +178,16 @@ st.markdown("Automated workflow: Keyword Expansion -> Competitor Spy -> Outline 
 
 with st.sidebar:
     st.header("Settings")
-    api_key = st.text_input("OpenAI API Key", type="password")
+    
+    # --- NEW: SECRETS MANAGEMENT ---
+    if "OPENAI_API_KEY" in st.secrets:
+        st.success("API Key loaded from Cloud Secrets ✅")
+        api_key = st.secrets["OPENAI_API_KEY"]
+    else:
+        st.warning("No Secrets found (Local Mode).")
+        api_key = st.text_input("OpenAI API Key", type="password")
+    # -------------------------------
+
     st.markdown("---")
     st.write("Created for the SEO Team.")
 
@@ -195,7 +204,7 @@ with col2:
 
 if st.button("Generate Content Strategy"):
     if not api_key:
-        st.error("Please enter your OpenAI API Key in the sidebar.")
+        st.error("Missing OpenAI API Key. Please add it to Secrets or the sidebar.")
     elif not primary_kw:
         st.error("Please enter a primary keyword.")
     else:
