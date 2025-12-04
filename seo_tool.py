@@ -8,12 +8,11 @@ import xml.etree.ElementTree as ET
 SITEMAP_URL = "https://hireoverseas.com/sitemap.xml" 
 
 # Set page layout
-st.set_page_config(page_title="Hire Overseas SEO Generator", layout="wide")
+st.set_page_config(page_title="Hire Overseas SEO Suite", layout="wide")
 
 # --- FUNCTIONS ---
 
 def get_sitemap_links(sitemap_url):
-    """Fetches real URLs from the website to prevent hallucination."""
     try:
         response = requests.get(sitemap_url, timeout=10)
         if response.status_code == 200:
@@ -29,7 +28,6 @@ def get_sitemap_links(sitemap_url):
     return []
 
 def scrape_text_from_url(url):
-    """Scrapes text from competitor URLs."""
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
@@ -43,180 +41,182 @@ def scrape_text_from_url(url):
         chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
         text = '\n'.join(chunk for chunk in chunks if chunk)
         
-        return text[:2000]
+        return text[:3000] # Increased limit slightly for comparison
     except Exception as e:
         return f"Could not scrape {url}: {e}"
 
-def generate_seo_content(api_key, primary_kw, secondary_kws, competitor_urls):
+# --- LOGIC: MODE 1 (NEW CONTENT) ---
+def generate_new_content(api_key, primary_kw, secondary_kws, competitor_urls):
     client = openai.OpenAI(api_key=api_key)
-    
-    # SYSTEM PROMPT
-    system_instruction = """
-    You are a creative SEO expert with content expertise.
-    You are going to carry out content creation that will make 'Hire Overseas' a go-to website to hire remote workers.
-    Make the content align with US businesses/users looking to hire workers remotely.
-    """
-
+    system_instruction = "You are a creative SEO expert. Focus on US Business audience. Write content that converts."
     status = st.empty()
     
-    # --- STEP 1: KEYWORD PROCESSING ---
-    status.info("Phase 1: Analyzing and expanding keywords...")
-    kw_prompt = f"""
-    Target Primary Keyword: {primary_kw}
-    Initial Secondary Keywords: {secondary_kws}
-    
-    1. Review the secondary keywords.
-    2. Generate semantic keywords relevant to the primary keyword.
-    3. Return ONLY a comma-separated list of the top 15 most vital keywords.
-    """
-    
-    kw_response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": kw_prompt}]
-    )
+    # Phase 1: Keywords
+    status.info("Phase 1: Keyword Expansion...")
+    kw_prompt = f"Target: {primary_kw}. Secondary: {secondary_kws}. Return ONLY a comma-separated list of top 15 vital keywords (semantic + provided)."
+    kw_response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": kw_prompt}])
     final_keywords = kw_response.choices[0].message.content
     
-    # --- STEP 2: COMPETITOR ANALYSIS ---
-    status.info("Phase 2: Scraping and analyzing competitors...")
+    # Phase 2: Outline
+    status.info("Phase 2: Analyzing Competitors & Outlining...")
     competitor_data = ""
     for url in competitor_urls:
         if url:
             content = scrape_text_from_url(url)
             competitor_data += f"\n--- Content from {url} ---\n{content}\n"
             
-    analysis_prompt = f"""
-    The target keywords are: {final_keywords}
-    
-    Here is the content from top competitors for the primary keyword '{primary_kw}':
-    {competitor_data}
-    
-    Analyze their content structures, gaps, and strengths. 
-    Based on this analysis, create the BEST SEO-optimized outline for a new article.
-    """
-    
-    outline_response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": analysis_prompt}]
-    )
+    analysis_prompt = f"Keywords: {final_keywords}. Competitor Content: {competitor_data}. Create the BEST SEO-optimized outline for '{primary_kw}'."
+    outline_response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": analysis_prompt}])
     outline = outline_response.choices[0].message.content
 
-    # --- STEP 3: WRITING CONTENT (UPDATED PROMPT) ---
-    status.info("Phase 3: Writing the article with new guidelines...")
-    
+    # Phase 3: Writing
+    status.info("Phase 3: Writing Article...")
     writing_prompt = f"""
-    Create a unique and SEO-optimized blog post based on the outline below.
+    Write a unique, SEO-optimized blog post for '{primary_kw}'.
+    Outline: {outline}
+    Keywords: {final_keywords}
     
-    Main Keyword: {primary_kw}
-    Secondary Keywords (incorporate naturally and only when possible): {final_keywords}
-    
-    Outline:
-    {outline}
-    
-    Strict Content Guidelines:
-    - Write concise, clear, and direct-to-the-point sentences.
-    - Avoid using "—" (em dashes) when not necessary; instead connect sentences using "but", "and", "or", and other sentence connectors if applicable.
-    - I want unique, purposeful information that is very relevant and specific to the topic.
-    - Focus on US businesses as the target audience.
+    Strict Guidelines:
+    - Concise, clear, direct sentences.
+    - NO em-dashes ("—"). Use "but", "and", "or" connectors.
+    - Focus on unique, purposeful info relevant to US businesses.
     """
-    
-    article_response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": writing_prompt}]
-    )
+    article_response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": writing_prompt}])
     article_content = article_response.choices[0].message.content
 
-    # --- STEP 4: META DATA ---
-    status.info("Phase 4: Generating Meta Data...")
-    meta_prompt = f"""
-    Based on the article written, create:
-    1. A Title Tag (Max 60 chars).
-    2. A Meta Description (Max 155 chars).
-    """
-    meta_response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": meta_prompt}]
-    )
-    meta_data = meta_response.choices[0].message.content
-
-    # --- STEP 5: INTERNAL LINKING ---
-    status.info("Phase 5: Finding internal linking opportunities...")
+    # Phase 4 & 5
+    status.info("Phase 4 & 5: Meta Data & Links...")
+    meta_prompt = "Create Title (max 60 chars) and Meta Description (max 155 chars) for this article."
+    meta_response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": meta_prompt}])
     
-    sitemap_links = get_sitemap_links(SITEMAP_URL) 
-    links_context = "\n".join(sitemap_links) if sitemap_links else "No sitemap data found. Suggest general relevant anchors."
-
-    link_prompt = f"""
-    The article is about: {primary_kw}
-    
-    Here is a list of actual URLs found on the hireoverseas.com website:
-    {links_context}
-    
-    Review the article you wrote. Identify 3-5 opportunities to internally link to the URLs provided above.
-    List them as: "Anchor Text" -> URL.
-    DO NOT fabricate URLs. Only use URLs from the list provided.
-    """
-    
-    link_response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": link_prompt}]
-    )
-    internal_links = link_response.choices[0].message.content
+    sitemap_links = get_sitemap_links(SITEMAP_URL)
+    links_context = "\n".join(sitemap_links) if sitemap_links else "No sitemap data."
+    link_prompt = f"Article: {primary_kw}. Site URLs: {links_context}. Suggest 3-5 internal links (Anchor Text -> URL). Use ONLY provided URLs."
+    link_response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": link_prompt}])
     
     status.success("Done!")
+    return final_keywords, outline, article_content, meta_response.choices[0].message.content, link_response.choices[0].message.content
+
+# --- LOGIC: MODE 2 (CONTENT AUDIT) ---
+def audit_existing_content(api_key, target_kw, my_url, competitor_url):
+    client = openai.OpenAI(api_key=api_key)
+    system_instruction = "You are a ruthless SEO editor. Your job is to find why the competitor is ranking higher and fix it."
+    status = st.empty()
     
-    return final_keywords, outline, article_content, meta_data, internal_links
+    status.info("Scraping content...")
+    my_content = scrape_text_from_url(my_url)
+    comp_content = scrape_text_from_url(competitor_url)
+    
+    # Phase 1: Gap Analysis
+    status.info("Analyzing Content Gaps...")
+    audit_prompt = f"""
+    Target Keyword: {target_kw}
+    
+    MY CONTENT:
+    {my_content}
+    
+    COMPETITOR CONTENT (Ranking #1):
+    {comp_content}
+    
+    Compare these two articles. 
+    1. Identify 3-5 specific topics, data points, or angles the Competitor covers that I missed.
+    2. Analyze the depth difference.
+    3. List the missing semantic keywords.
+    """
+    audit_response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": audit_prompt}])
+    audit_result = audit_response.choices[0].message.content
+    
+    # Phase 2: The Fix
+    status.info("Drafting the updates...")
+    fix_prompt = f"""
+    Based on the audit below, write 3 new sections (paragraphs) that I should insert into my article to close the gap.
+    
+    Audit Findings:
+    {audit_result}
+    
+    Writing Guidelines:
+    - Match the tone of US Business professional.
+    - Concise, clear sentences. No em-dashes.
+    - Provide "Insert this section after..." instructions.
+    """
+    fix_response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": system_instruction}, {"role": "user", "content": fix_prompt}])
+    fix_result = fix_response.choices[0].message.content
+    
+    status.success("Audit Complete!")
+    return audit_result, fix_result
+
 
 # --- FRONTEND UI ---
 
-st.title("🚀 Hire Overseas SEO Content Generator")
-st.markdown("Automated workflow: Keyword Expansion -> Competitor Spy -> Outline -> Write -> Optimize.")
+st.title("🚀 Hire Overseas SEO Suite")
 
 with st.sidebar:
-    st.header("Settings")
+    st.header("Select Tool")
+    # THE MODE SWITCHER
+    app_mode = st.radio("Choose a Workflow:", ["1. New Article Generator", "2. Content Refresh Auditor"])
+    
+    st.divider()
     if "OPENAI_API_KEY" in st.secrets:
-        st.success("API Key loaded from Cloud Secrets ✅")
+        st.success("API Key loaded ✅")
         api_key = st.secrets["OPENAI_API_KEY"]
     else:
-        st.warning("No Secrets found (Local Mode).")
         api_key = st.text_input("OpenAI API Key", type="password")
-    st.markdown("---")
-    st.write("Created for the SEO Team.")
 
-# Form inputs
-col1, col2 = st.columns(2)
-with col1:
-    primary_kw = st.text_input("1. Primary Keyword")
-    secondary_kws = st.text_area("2. Secondary Keywords (Paste list)")
+# --- UI FOR MODE 1: NEW ARTICLE ---
+if app_mode == "1. New Article Generator":
+    st.subheader("📝 Generate New Content")
+    col1, col2 = st.columns(2)
+    with col1:
+        primary_kw = st.text_input("Target Keyword")
+        secondary_kws = st.text_area("Secondary Keywords List")
+    with col2:
+        comp_1 = st.text_input("Competitor URL 1")
+        comp_2 = st.text_input("Competitor URL 2")
+        comp_3 = st.text_input("Competitor URL 3")
 
-with col2:
-    comp_1 = st.text_input("Competitor URL 1")
-    comp_2 = st.text_input("Competitor URL 2")
-    comp_3 = st.text_input("Competitor URL 3")
+    if st.button("Generate Strategy"):
+        if not api_key: st.error("Missing API Key")
+        elif not primary_kw: st.error("Enter a keyword")
+        else:
+            competitors = [url for url in [comp_1, comp_2, comp_3] if url]
+            kw, out, art, meta, links = generate_new_content(api_key, primary_kw, secondary_kws, competitors)
+            
+            st.divider()
+            st.subheader("Target Keywords")
+            st.info(kw)
+            with st.expander("View Outline"):
+                st.write(out)
+            st.subheader("Article Draft")
+            st.markdown(art)
+            st.download_button("Download", art, f"{primary_kw}_article.md")
+            st.subheader("Meta & Links")
+            st.code(meta)
+            st.warning(links)
 
-if st.button("Generate Content Strategy"):
-    if not api_key:
-        st.error("Missing OpenAI API Key.")
-    elif not primary_kw:
-        st.error("Please enter a primary keyword.")
-    else:
-        competitors = [url for url in [comp_1, comp_2, comp_3] if url]
+# --- UI FOR MODE 2: CONTENT AUDIT ---
+elif app_mode == "2. Content Refresh Auditor":
+    st.subheader("🔍 Audit & Fix Old Content")
+    st.markdown("Compare your old page against the current #1 ranking competitor to find content gaps.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        my_url = st.text_input("Your Existing URL (The one to fix)")
+        target_kw = st.text_input("Target Keyword")
+    with col2:
+        comp_url = st.text_input("Winning Competitor URL (The standard)")
         
-        keywords, outline, article, meta, links = generate_seo_content(
-            api_key, primary_kw, secondary_kws, competitors
-        )
-        
-        st.divider()
-        st.subheader("1. Target Keywords Strategy")
-        st.info(keywords)
-        
-        st.subheader("2. SEO Outline")
-        st.text_area("Outline", outline, height=200)
-        
-        st.subheader("3. Final Article")
-        st.markdown(article)
-        st.download_button("Download Article", article, file_name=f"{primary_kw.replace(' ', '_')}_article.md")
-        
-        st.subheader("4. Meta Data")
-        st.code(meta, language='text')
-        
-        st.subheader("5. Internal Linking Opportunities")
-        st.warning(links)
+    if st.button("Run Audit"):
+        if not api_key: st.error("Missing API Key")
+        elif not my_url or not comp_url: st.error("Please enter both URLs")
+        else:
+            audit, fixes = audit_existing_content(api_key, target_kw, my_url, comp_url)
+            
+            st.divider()
+            st.subheader("1. The Gap Analysis")
+            st.info("Here is what the competitor is doing better:")
+            st.markdown(audit)
+            
+            st.divider()
+            st.subheader("2. The Fix (Copy-Paste Updates)")
+            st.success("Here is the content you need to add to your page:")
+            st.markdown(fixes)
